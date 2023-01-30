@@ -1,63 +1,114 @@
 using System.Xml.Linq;
+using System.Xml;
+using System.Xml.Xsl;
 
 namespace XSLT___Transformation
 {
-    public partial class frmMain : Form 
+    public partial class frmMain : Form
     {
-        private string desktopDirectory = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-        private string fileName { get; set; }
-        
+
+        private string fileNameXML;
+        private string fileNameXSL;
+
         public frmMain()
         {
             InitializeComponent();
         }
 
-        private void btnOpenFile_Click(object sender, EventArgs e)
+        private void btnOpenFileXML_Click(object sender, EventArgs e)
         {
             OpenFileDialog openFileDialog = new();
 
             if (openFileDialog.ShowDialog() == DialogResult.OK)
             {
-                fileName = openFileDialog.FileName;
-                XDocument document = XDocument.Load(fileName);
-                inputFile.Text = document.ToString();  
+                fileNameXML = openFileDialog.FileName;
+                XDocument document = XDocument.Load(fileNameXML);
+                inputFile.Text = document.ToString();
+            }
+            else MessageBox.Show("File not selected to convert");
+        }
+
+        private void btnOpenFileXSL_Click(object sender, EventArgs e)
+        {
+            OpenFileDialog openFileDialog = new();
+
+            if (openFileDialog.ShowDialog() == DialogResult.OK)
+            {
+                fileNameXSL = openFileDialog.FileName;
             }
             else MessageBox.Show("File not selected to convert");
         }
 
         private void btnTransformation_Click(object sender, EventArgs e)
         {
-            if (!string.IsNullOrEmpty(fileName))
+            if (!string.IsNullOrEmpty(fileNameXML) && !string.IsNullOrEmpty(fileNameXSL))
             {
-                StartTransformation(fileName);
+                StartTransformation(fileNameXML, fileNameXSL);
             }
             else MessageBox.Show("File not selected to convert");
         }
 
-        private void StartTransformation(string fileName)
+        private void StartTransformation(string fileNameXML, string fileNameXSLT)
         {
-            XElement document = XElement.Load(fileName);
-            document.SetAttributeValue("count", document.Elements("item").Count());
-            document.Save(fileName);
-            var newData =
-                new XElement("groups",
-                    from data in document.Elements("item")
-                    orderby (int)data.Attribute("group")
-                    group data by (int)data.Attribute("group")
+            string outPutFile = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory) + "/Groups.xml"; 
+            
+            XslCompiledTransform xslCompiledTransform = new();
+            xslCompiledTransform.Load(fileNameXSLT);
+            XmlTextWriter xmlTextWriter = new XmlTextWriter(outPutFile, null);
+            xslCompiledTransform.Transform(fileNameXML, null, xmlTextWriter);
+            xmlTextWriter.Close();
 
-                    into groupedData
-                    select new XElement("group",
-                        new XAttribute("name", groupedData.Key), new XAttribute("count", groupedData.Count()),
-                        from _group in groupedData
-                        orderby (int)_group.Attribute("name")
-                        select new XElement("item",
-                            _group.Attribute("name"))
-                    )
-                );
+            AddCountItemsToInputFile(fileNameXML);
+            AddCountItemsInGroups(outPutFile);
+        }
 
-            newData.Save(desktopDirectory + "/Groups.xml");
-            inputFile.Text = document.ToString();
-            outputFile.Text = newData.ToString();
-        } 
+        private void AddCountItemsInGroups(string outPutFile)
+        {
+            XmlDocument document = new();
+            document.Load(outPutFile);
+
+            XmlDeclaration xmldecl;
+            xmldecl = document.CreateXmlDeclaration("1.0", "utf-8", null);
+
+            if (document != null)
+            {
+                XmlElement root = document.DocumentElement;
+
+                if (root != null)
+                {
+                    XmlNodeList elemList = root.GetElementsByTagName("group");
+
+                    foreach (XmlNode elem in elemList)
+                    {
+                        XmlAttribute attr = document.CreateAttribute("count");
+                        attr.Value = elem.ChildNodes.Count.ToString();
+                        elem.Attributes.Append(attr);
+                    }
+
+                    document.InsertBefore(xmldecl, root);
+                    document.Save(outPutFile);
+                    outputFile.Text = document.InnerXml;
+                }
+            }
+        }
+
+        private void AddCountItemsToInputFile(string fileNameXML)
+        {
+            XmlDocument document = new();
+            document.Load(fileNameXML);
+            if (document != null)
+            {
+                XmlNodeList elemList = document.SelectNodes("list");
+
+                foreach (XmlNode elem in elemList)
+                {
+                    XmlAttribute attr = document.CreateAttribute("count");
+                    attr.Value = elem.ChildNodes.Count.ToString();
+                    elem.Attributes.Append(attr);
+                }
+                document.Save(fileNameXML);
+                inputFile.Text = document.InnerXml;
+            }
+        }
     }
 }
